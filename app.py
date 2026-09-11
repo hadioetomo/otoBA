@@ -5,7 +5,7 @@ import random
 from num2words import num2words
 from weasyprint import HTML
 import tempfile
-from utils_wa import send_whatsapp_message
+from utils_wa import send_whatsapp_message, send_whatsapp_file
 
 st.set_page_config(page_title="BANEGO Generator - Pelindo Sub Regional Jawa", layout="wide")
 
@@ -317,7 +317,7 @@ else:
         )
 
         if target_wa_phone:
-            caption_text = f"Berikut adalah Berita Acara Negosiasi (BANEGO) untuk pekerjaan *{nama_pekerjaan* with Nomor: *{nomor_ba}*."
+            caption_text = f"Berikut adalah Berita Acara Negosiasi (BANEGO) untuk pekerjaan *{nama_pekerjaan}* dengan Nomor: *{nomor_ba}*."
             wa_response = send_whatsapp_message(target_wa_phone, caption_text)
             
             if wa_response.get("status") in [True, "true", 200, "200"]:
