@@ -23,7 +23,7 @@ def load_json(filename):
 users_db = load_json("config_users.json")
 vendors_db = load_json("config_vendors.json")
 
-# List master pegawai Pelindo (bisa ditambah/diatur sesuai kebutuhan)
+# List master pegawai Pelindo
 pelindo_staff_master = [
     "Mulyo Wardoyo | Manager Teknologi Informasi Sub Regional Jawa",
     "Yanuar Kresnanto | Officer Teknologi Informasi Sub Regional Jawa",
@@ -152,13 +152,26 @@ else:
             if st.checkbox(staff, value=True, key=f"pelindo_{staff}"):
                 selected_pelindo.append(staff)
 
-        # Pilihan Vendor dan Pegawainya dari database
-        selected_vendor = st.selectbox("Pilih PT / Vendor dari Database", options=list(vendors_db.keys()))
+        # Pemilihan Vendor dengan deteksi perubahan state agar checkbox pegawai ikut ter-refresh
+        selected_vendor = st.selectbox("Pilih PT / Vendor dari Database", options=list(vendors_db.keys()), key="current_selected_vendor")
+        
+        if "last_vendor" not in st.session_state:
+            st.session_state.last_vendor = selected_vendor
+
+        if st.session_state.last_vendor != selected_vendor:
+            for key in list(st.session_state.keys()):
+                if key.startswith("v_staff_"):
+                    del st.session_state[key]
+            st.session_state.last_vendor = selected_vendor
+            st.rerun()
+
         st.markdown(f"**Pilih Pegawai dari {selected_vendor}:**")
         vendor_staff_list = vendors_db.get(selected_vendor, [])
         selected_vendor_staff = []
-        for v_staff in vendor_staff_list:
-            if st.checkbox(v_staff, value=True, key=f"vendor_staff_{v_staff}"):
+        
+        for idx, v_staff in enumerate(vendor_staff_list):
+            checkbox_key = f"v_staff_{selected_vendor}_{idx}"
+            if st.checkbox(v_staff, value=True, key=checkbox_key):
                 selected_vendor_staff.append(v_staff)
 
         st.subheader("5. Kirim Dokumen ke WhatsApp")
@@ -172,7 +185,7 @@ else:
         format_sebelum = format_rupiah(harga_sebelum)
         format_sesudah = format_rupiah(harga_sesudah)
 
-        # Generate PDF using ReportLab with clean typography & spacing
+        # Generate PDF using ReportLab
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
             output_pdf_path = tmp_pdf.name
 
@@ -222,7 +235,7 @@ else:
         story.append(Paragraph(f"Negosiasi {nama_pekerjaan}.", style_normal))
         story.append(Spacer(1, 10))
 
-        # Hasil Pembahasan (Tanpa kolom kesanggupan vendor, sesuai template baku)
+        # Hasil Pembahasan
         story.append(Paragraph("<b>Hasil Pembahasan</b>", style_normal))
         story.append(Paragraph(f"1. Telah diadakan negosiasi terhadap harga penawaran dengan {selected_vendor} terkait {nama_pekerjaan}.", style_normal))
         story.append(Paragraph("2. Dari pembahasan tersebut butir 1 (satu) diatas, maka diperoleh hasil negosiasi sebagai berikut:", style_normal))
@@ -242,7 +255,6 @@ else:
         story.append(Paragraph("<b>PT. Pelindo (Persero) Sub Regional Jawa</b>", ParagraphStyle('RightDateBold', parent=style_bold, alignment=2)))
         story.append(Spacer(1, 35))
 
-        # Build signatures pairs dynamically
         sig_rows = []
         max_sig = max(len(selected_pelindo), len(selected_vendor_staff))
         for i in range(max_sig):
@@ -288,7 +300,6 @@ else:
         for idx, (att_name, att_title) in enumerate(all_attendees, 1):
             att_table_data.append([str(idx), att_name, att_title, f"{idx}. ........"])
             
-        # Minimal row padding if attendees are less than 5
         for idx in range(len(all_attendees) + 1, max(6, len(all_attendees) + 1)):
             att_table_data.append([str(idx), "", "", f"{idx}. ........"])
 
@@ -319,15 +330,11 @@ else:
             mime="application/octet-stream"
         )
 
-        # Pengiriman File PDF ke WhatsApp menggunakan fungsi Watzap API File
         if target_wa_phone:
             caption_text = f"Berikut adalah Berita Acara Negosiasi (BANEGO) untuk pekerjaan *{nama_pekerjaan}* dengan Nomor: *{nomor_ba}*."
-            
-            # Catatan: Watzap API membutuhkan file accessible URL publik atau base64 tergantung implementasi server. 
-            # Menggunakan fungsi pengiriman teks/notifikasi atau file helper yang tersedia di utils_wa:
-            wa_response = send_whatsapp_message(target_wa_phone, f"{caption_text}\n\n(Dokumen PDF berhasil dibuat dan siap diunduh melalui aplikasi Streamlit).")
+            wa_response = send_whatsapp_message(target_wa_phone, f"{caption_text}\n\n(Dokumen PDF Berita Acara Negosiasi telah berhasil dibuat).")
             
             if wa_response.get("status") in [True, "true", 200, "200"]:
-                st.success(f"🚀 Berhasil mengirimkan notifikasi & file ke WhatsApp nomor {target_wa_phone} via Watzap API!")
+                st.success(f"🚀 Berhasil mengirimkan notifikasi ke WhatsApp nomor {target_wa_phone} via Watzap API!")
             else:
                 st.warning(f"⚠️ Status pengiriman WhatsApp API: {wa_response}")
