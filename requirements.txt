@@ -1,0 +1,4 @@
+streamlit
+weasyprint
+num2words
+requests
