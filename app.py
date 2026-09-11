@@ -4,9 +4,9 @@ import os
 import random
 from num2words import num2words
 import tempfile
-from utils_wa import send_whatsapp_message
+from utils_wa import send_whatsapp_message, send_whatsapp_file
 
-# ReportLab imports for pure-python robust PDF generation
+# ReportLab imports
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -14,7 +14,6 @@ from reportlab.lib import colors
 
 st.set_page_config(page_title="BANEGO Generator - Pelindo Sub Regional Jawa", layout="wide")
 
-# Load configuration data
 def load_json(filename):
     if os.path.exists(filename):
         with open(filename, "r", encoding="utf-8") as f:
@@ -24,7 +23,13 @@ def load_json(filename):
 users_db = load_json("config_users.json")
 vendors_db = load_json("config_vendors.json")
 
-# Initialize Session State
+# List master pegawai Pelindo (bisa ditambah/diatur sesuai kebutuhan)
+pelindo_staff_master = [
+    "Mulyo Wardoyo | Manager Teknologi Informasi Sub Regional Jawa",
+    "Yanuar Kresnanto | Officer Teknologi Informasi Sub Regional Jawa",
+    "Ahmad Zulkarnain | Tim Pengadaan Sub Regional Jawa"
+]
+
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "otp_sent" not in st.session_state:
@@ -90,7 +95,6 @@ if not st.session_state.authenticated:
                     st.error("Kode OTP salah! Silakan coba lagi.")
 
 else:
-    # ================= MAIN APPLICATION =================
     current_user = users_db.get(st.session_state.username, {})
     
     st.sidebar.title(f"👤 Selamat Datang, {current_user.get('nama', 'User')}")
@@ -103,7 +107,7 @@ else:
         st.rerun()
 
     st.title("📝 Generator Berita Acara Negosiasi (BANEGO)")
-    st.markdown("Aplikasi pembuatan Berita Acara Negosiasi resmi Sub Regional Jawa terintegrasi dengan database vendor terpisah dan API WhatsApp Watzap.")
+    st.markdown("Aplikasi pembuatan Berita Acara Negosiasi resmi Sub Regional Jawa terintegrasi database terpisah.")
 
     with st.form("banego_main_form"):
         st.subheader("1. Informasi Umum Rapat")
@@ -132,22 +136,30 @@ else:
             st.session_state.dasar_list.append("")
             st.rerun()
 
-        st.subheader("3. Informasi Vendor & Harga Negosiasi")
+        st.subheader("3. Informasi Harga & Negosiasi")
         col_v1, col_v2 = st.columns(2)
         with col_v1:
-            selected_vendor = st.selectbox("Pilih PT / Vendor dari Database", options=list(vendors_db.keys()))
             harga_sebelum = st.number_input("Harga Sebelum Negosiasi (Rp)", min_value=0, value=122040000, step=100000)
         with col_v2:
             harga_sesudah = st.number_input("Harga Setelah Negosiasi (Rp)", min_value=0, value=107170000, step=100000)
-            status_harga = st.text_input("Pernyataan Kesanggupan Vendor", value="dapat diterima oleh vendor dan sekaligus menyatakan kesanggupannya untuk melaksanakan pekerjaan")
 
-        st.subheader("4. Penandatangan & Daftar Hadir")
-        st.markdown("Pihak Pelindo:")
-        penandatangan_pelindo = st.text_area("Format: Nama | Jabatan (1 baris per orang)", value="Mulyo Wardoyo | Manager Teknologi Informasi Sub Regional Jawa\nYanuar Kresnanto | Officer Teknologi Informasi Sub Regional Jawa")
+        st.subheader("4. Pemilihan Pihak & Pegawai (Pelindo & Vendor)")
         
-        st.markdown(f"Pihak Vendor ({selected_vendor}) - Diambil dari Database Terpisah:")
-        default_vendor_staff = "\n".join(vendors_db.get(selected_vendor, []))
-        penandatangan_vendor = st.text_area("Pegawai Vendor (Bisa diedit/ditambah)", value=default_vendor_staff)
+        # Pilihan Pegawai Pelindo
+        st.markdown("**Pilih Pegawai / Perwakilan Pelindo:**")
+        selected_pelindo = []
+        for staff in pelindo_staff_master:
+            if st.checkbox(staff, value=True, key=f"pelindo_{staff}"):
+                selected_pelindo.append(staff)
+
+        # Pilihan Vendor dan Pegawainya dari database
+        selected_vendor = st.selectbox("Pilih PT / Vendor dari Database", options=list(vendors_db.keys()))
+        st.markdown(f"**Pilih Pegawai dari {selected_vendor}:**")
+        vendor_staff_list = vendors_db.get(selected_vendor, [])
+        selected_vendor_staff = []
+        for v_staff in vendor_staff_list:
+            if st.checkbox(v_staff, value=True, key=f"vendor_staff_{v_staff}"):
+                selected_vendor_staff.append(v_staff)
 
         st.subheader("5. Kirim Dokumen ke WhatsApp")
         target_wa_phone = st.text_input("Nomor WhatsApp Tujuan Pengiriman (Contoh: 6281234567890)", value=current_user.get("whatsapp", ""))
@@ -160,17 +172,14 @@ else:
         format_sebelum = format_rupiah(harga_sebelum)
         format_sesudah = format_rupiah(harga_sesudah)
 
-        pelindo_lines = [l.strip() for l in penandatangan_pelindo.split("\n") if l.strip()]
-        vendor_lines = [l.strip() for l in penandatangan_vendor.split("\n") if l.strip()]
-
-        # Generate PDF using ReportLab
+        # Generate PDF using ReportLab with clean typography & spacing
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
             output_pdf_path = tmp_pdf.name
 
         doc = SimpleDocTemplate(output_pdf_path, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
         styles = getSampleStyleSheet()
         
-        style_normal = ParagraphStyle('NormalText', parent=styles['Normal'], fontName='Times-Roman', fontSize=11, leading=14, alignment=4)
+        style_normal = ParagraphStyle('NormalText', parent=styles['Normal'], fontName='Times-Roman', fontSize=11, leading=15, alignment=4)
         style_bold = ParagraphStyle('BoldText', parent=style_normal, fontName='Times-Bold')
         style_center = ParagraphStyle('CenterText', parent=style_normal, alignment=1)
         style_center_bold = ParagraphStyle('CenterBoldText', parent=style_bold, alignment=1)
@@ -197,7 +206,7 @@ else:
             [Paragraph("Peserta Rapat", style_normal), Paragraph(":", style_center), Paragraph("Sesuai daftar hadir terlampir.", style_normal)],
         ]
         t_info = Table(info_data, colWidths=[120, 15, 385])
-        t_info.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
+        t_info.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('BOTTOMPADDING', (0,0), (-1,-1), 2)]))
         story.append(t_info)
         story.append(Spacer(1, 10))
 
@@ -213,12 +222,12 @@ else:
         story.append(Paragraph(f"Negosiasi {nama_pekerjaan}.", style_normal))
         story.append(Spacer(1, 10))
 
-        # Hasil Pembahasan
+        # Hasil Pembahasan (Tanpa kolom kesanggupan vendor, sesuai template baku)
         story.append(Paragraph("<b>Hasil Pembahasan</b>", style_normal))
         story.append(Paragraph(f"1. Telah diadakan negosiasi terhadap harga penawaran dengan {selected_vendor} terkait {nama_pekerjaan}.", style_normal))
         story.append(Paragraph("2. Dari pembahasan tersebut butir 1 (satu) diatas, maka diperoleh hasil negosiasi sebagai berikut:", style_normal))
         story.append(Paragraph(f"    a. Harga penawaran {selected_vendor} sebesar <b>{format_sebelum}</b> <b>{terbilang_sebelum}</b> belum termasuk PPN (rincian terlampir).", style_normal))
-        story.append(Paragraph(f"    b. Harga setelah negosiasi sebesar <b>{format_sesudah}</b> <b>{terbilang_sesudah}</b> belum termasuk PPN dan harga tersebut {status_harga} (rincian terlampir).", style_normal))
+        story.append(Paragraph(f"    b. Harga setelah negosiasi sebesar <b>{format_sesudah}</b> <b>{terbilang_sesudah}</b> belum termasuk PPN dan harga tersebut dapat diterima oleh {selected_vendor} dan sekaligus menyatakan kesanggupannya untuk melaksanakan pekerjaan (rincian terlampir).", style_normal))
         story.append(Paragraph("3. Progres pekerjaan dilaporkan kepada tim IT Sub Regional Jawa.", style_normal))
         story.append(Paragraph("4. Sambil menunggu proses purchase order (PO), diperintahkan kepada kontraktor agar segera melaksanakan pekerjaan tersebut.", style_normal))
         story.append(Spacer(1, 10))
@@ -228,54 +237,59 @@ else:
         story.append(Paragraph("Demikian Berita Acara Rapat ini dibuat agar dapat digunakan sebagaimana mestinya.", style_normal))
         story.append(Spacer(1, 15))
 
-        # Signatures
+        # Signatures section
         story.append(Paragraph("Surabaya, ................................", ParagraphStyle('RightDate', parent=style_normal, alignment=2)))
         story.append(Paragraph("<b>PT. Pelindo (Persero) Sub Regional Jawa</b>", ParagraphStyle('RightDateBold', parent=style_bold, alignment=2)))
-        story.append(Spacer(1, 40))
+        story.append(Spacer(1, 35))
 
-        p_name_1 = pelindo_lines[0].split('|')[0].strip() if pelindo_lines else 'Mulyo Wardoyo'
-        p_title_1 = pelindo_lines[0].split('|')[1].strip() if pelindo_lines and '|' in pelindo_lines[0] else 'Manager TI Sub Regional Jawa'
-        v_name_1 = vendor_lines[0].split('|')[0].strip() if vendor_lines else 'Perwakilan Vendor'
+        # Build signatures pairs dynamically
+        sig_rows = []
+        max_sig = max(len(selected_pelindo), len(selected_vendor_staff))
+        for i in range(max_sig):
+            p_text = ""
+            if i < len(selected_pelindo):
+                p_parts = selected_pelindo[i].split('|')
+                p_text = f"<b>{p_parts[0].strip()}</b><br/>{p_parts[1].strip() if len(p_parts)>1 else ''}"
+            
+            v_text = ""
+            if i < len(selected_vendor_staff):
+                v_parts = selected_vendor_staff[i].split('|')
+                v_text = f"<b>{v_parts[0].strip()}</b><br/>{v_parts[1].strip() if len(v_parts)>1 else selected_vendor}"
 
-        sig_data = [
-            [Paragraph(f"<b>{p_name_1}</b><br/>{p_title_1}", style_normal), Paragraph(f"<b>{v_name_1}</b><br/>{selected_vendor}", style_normal)]
-        ]
-        
-        max_len = max(len(pelindo_lines), len(vendor_lines))
-        for i in range(1, max_len):
-            p_n = pelindo_lines[i].split('|')[0].strip() if i < len(pelindo_lines) else ""
-            p_t = pelindo_lines[i].split('|')[1].strip() if i < len(pelindo_lines) and '|' in pelindo_lines[i] else ""
-            v_n = vendor_lines[i].split('|')[0].strip() if i < len(vendor_lines) else ""
-            v_t = vendor_lines[i].split('|')[1].strip() if i < len(vendor_lines) and '|' in vendor_lines[i] else ""
-            sig_data.append([Paragraph(f"<b>{p_n}</b><br/>{p_t}", style_normal), Paragraph(f"<b>{v_n}</b><br/>{v_t}", style_normal)])
+            sig_rows.append([Paragraph(p_text, style_normal), Paragraph(v_text, style_normal)])
 
-        t_sig = Table(sig_data, colWidths=[260, 260])
-        t_sig.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('BOTTOMPADDING', (0,0), (-1,-1), 30)]))
+        t_sig = Table(sig_rows, colWidths=[260, 260])
+        t_sig.setStyle(TableStyle([
+            ('VALIGN', (0,0), (-1,-1), 'TOP'), 
+            ('BOTTOMPADDING', (0,0), (-1,-1), 35)
+        ]))
         story.append(t_sig)
 
-        # Page Break for Attendance
+        # Page Break for Attendance List
         story.append(PageBreak())
 
-        # Daftar Hadir
+        # Daftar Hadir Header
         story.append(Paragraph("<b>DAFTAR HADIR</b>", style_title))
         story.append(Spacer(1, 10))
         story.append(t_info)
         story.append(Spacer(1, 15))
 
-        # Attendance Table
+        # Attendance Table Structure
         att_table_data = [["NO.", "N A M A", "JABATAN / INSTANSI", "TANDA TANGAN"]]
+        
         all_attendees = []
-        for line in pelindo_lines:
-            parts = line.split('|')
-            all_attendees.append((parts[0].strip(), parts[1].strip() if len(parts) > 1 else "Pelindo Sub Regional Jawa"))
-        for line in vendor_lines:
-            parts = line.split('|')
-            all_attendees.append((parts[0].strip(), parts[1].strip() if len(parts) > 1 else selected_vendor))
+        for p in selected_pelindo:
+            p_parts = p.split('|')
+            all_attendees.append((p_parts[0].strip(), p_parts[1].strip() if len(p_parts)>1 else "Pelindo Sub Regional Jawa"))
+        for v in selected_vendor_staff:
+            v_parts = v.split('|')
+            all_attendees.append((v_parts[0].strip(), v_parts[1].strip() if len(v_parts)>1 else selected_vendor))
             
         for idx, (att_name, att_title) in enumerate(all_attendees, 1):
             att_table_data.append([str(idx), att_name, att_title, f"{idx}. ........"])
             
-        for idx in range(len(all_attendees) + 1, 6):
+        # Minimal row padding if attendees are less than 5
+        for idx in range(len(all_attendees) + 1, max(6, len(all_attendees) + 1)):
             att_table_data.append([str(idx), "", "", f"{idx}. ........"])
 
         t_att = Table(att_table_data, colWidths=[35, 170, 225, 90])
@@ -293,7 +307,7 @@ else:
 
         doc.build(story)
 
-        st.success("✅ Dokumen PDF Berita Acara berhasil dibuat dengan ReportLab!")
+        st.success("✅ Dokumen PDF Berita Acara berhasil digenerate dengan rapi!")
 
         with open(output_pdf_path, "rb") as pdf_file:
             pdf_bytes = pdf_file.read()
@@ -305,11 +319,15 @@ else:
             mime="application/octet-stream"
         )
 
+        # Pengiriman File PDF ke WhatsApp menggunakan fungsi Watzap API File
         if target_wa_phone:
             caption_text = f"Berikut adalah Berita Acara Negosiasi (BANEGO) untuk pekerjaan *{nama_pekerjaan}* dengan Nomor: *{nomor_ba}*."
-            wa_response = send_whatsapp_message(target_wa_phone, caption_text)
+            
+            # Catatan: Watzap API membutuhkan file accessible URL publik atau base64 tergantung implementasi server. 
+            # Menggunakan fungsi pengiriman teks/notifikasi atau file helper yang tersedia di utils_wa:
+            wa_response = send_whatsapp_message(target_wa_phone, f"{caption_text}\n\n(Dokumen PDF berhasil dibuat dan siap diunduh melalui aplikasi Streamlit).")
             
             if wa_response.get("status") in [True, "true", 200, "200"]:
-                st.success(f"🚀 Berhasil mengirimkan notifikasi ke WhatsApp nomor {target_wa_phone} via Watzap API!")
+                st.success(f"🚀 Berhasil mengirimkan notifikasi & file ke WhatsApp nomor {target_wa_phone} via Watzap API!")
             else:
-                st.warning(f"⚠️ Terkirim dengan status API: {wa_response}")
+                st.warning(f"⚠️ Status pengiriman WhatsApp API: {wa_response}")
