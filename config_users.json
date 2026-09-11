@@ -1,0 +1,12 @@
+{
+    "hadi": {
+        "nama": "Hadi Utomo",
+        "whatsapp": "6281234567890",
+        "jabatan": "Manager IT / User"
+    },
+    "admin": {
+        "nama": "Administrator IT",
+        "whatsapp": "6282139934994",
+        "jabatan": "System Administrator"
+    }
+}
