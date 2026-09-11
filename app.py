@@ -3,9 +3,14 @@ import json
 import os
 import random
 from num2words import num2words
-from weasyprint import HTML
 import tempfile
-from utils_wa import send_whatsapp_message, send_whatsapp_file
+from utils_wa import send_whatsapp_message
+
+# ReportLab imports for pure-python robust PDF generation
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 st.set_page_config(page_title="BANEGO Generator - Pelindo Sub Regional Jawa", layout="wide")
 
@@ -158,128 +163,107 @@ else:
         pelindo_lines = [l.strip() for l in penandatangan_pelindo.split("\n") if l.strip()]
         vendor_lines = [l.strip() for l in penandatangan_vendor.split("\n") if l.strip()]
 
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-        <meta charset="utf-8">
-        <style>
-            @page {{ size: A4; margin: 20mm 15mm; background: #fff; }}
-            body {{ font-family: 'Times New Roman', Times, serif; font-size: 11pt; line-height: 1.3; color: #000; }}
-            .center {{ text-align: center; }}
-            .bold {{ font-weight: bold; }}
-            table.info-table {{ width: 100%; border-collapse: collapse; margin: 10px 0; }}
-            table.info-table td {{ vertical-align: top; padding: 3px 0; }}
-            table.info-table td.label {{ width: 140px; }}
-            table.info-table td.sep {{ width: 15px; text-align: center; }}
-            table.sig-table {{ width: 100%; border-collapse: collapse; margin-top: 20px; page-break-inside: avoid; }}
-            table.sig-table td {{ vertical-align: top; width: 50%; padding: 5px; }}
-            table.attendance {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
-            table.attendance th, table.attendance td {{ border: 1px solid #000; padding: 5px 8px; font-size: 10pt; }}
-            table.attendance th {{ background-color: #f2f2f2; text-align: center; }}
-            .page-break {{ page-break-before: always; }}
-        </style>
-        </head>
-        <body>
-            <div class="center bold" style="font-size: 12pt;">BERITA ACARA RAPAT</div>
-            <div class="center bold" style="font-size: 12pt; margin-bottom: 15px;">TENTANG</div>
-            <div class="center bold" style="font-size: 12pt; text-transform: uppercase; margin-bottom: 20px;">{nama_pekerjaan}</div>
-            <div class="center" style="margin-bottom: 20px;">Nomor : {nomor_ba}</div>
+        # Generate PDF using ReportLab
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
+            output_pdf_path = tmp_pdf.name
 
-            <div class="bold">Pelaksanaan Rapat</div>
-            <table class="info-table">
-                <tr><td class="label">Hari / tanggal</td><td class="sep">:</td><td>{hari_tanggal}</td></tr>
-                <tr><td class="label">Pukul</td><td class="sep">:</td><td>{pukul}</td></tr>
-                <tr><td class="label">Tempat</td><td class="sep">:</td><td>{tempat}</td></tr>
-                <tr><td class="label">Agenda</td><td class="sep">:</td><td>Negosiasi {nama_pekerjaan}</td></tr>
-                <tr><td class="label">Pimpinan Rapat</td><td class="sep">:</td><td>{pimpinan_rapat}</td></tr>
-                <tr><td class="label">Peserta Rapat</td><td class="sep">:</td><td>Sesuai daftar hadir terlampir.</td></tr>
-            </table>
+        doc = SimpleDocTemplate(output_pdf_path, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+        styles = getSampleStyleSheet()
+        
+        style_normal = ParagraphStyle('NormalText', parent=styles['Normal'], fontName='Times-Roman', fontSize=11, leading=14, alignment=4)
+        style_bold = ParagraphStyle('BoldText', parent=style_normal, fontName='Times-Bold')
+        style_center = ParagraphStyle('CenterText', parent=style_normal, alignment=1)
+        style_center_bold = ParagraphStyle('CenterBoldText', parent=style_bold, alignment=1)
+        style_title = ParagraphStyle('TitleText', parent=style_center_bold, fontSize=12, leading=16)
 
-            <div class="bold" style="margin-top: 15px;">Dasar Pelaksanaan</div>
-            <ol style="margin-top: 5px; padding-left: 20px;">
-        """
-        for d in dasar_inputs:
+        story = []
+
+        # Header Title
+        story.append(Paragraph("BERITA ACARA RAPAT", style_title))
+        story.append(Paragraph("TENTANG", style_title))
+        story.append(Paragraph(nama_pekerjaan.upper(), style_title))
+        story.append(Spacer(1, 10))
+        story.append(Paragraph(f"Nomor : {nomor_ba}", style_center))
+        story.append(Spacer(1, 15))
+
+        # Pelaksanaan Rapat
+        story.append(Paragraph("<b>Pelaksanaan Rapat</b>", style_normal))
+        info_data = [
+            [Paragraph("Hari / tanggal", style_normal), Paragraph(":", style_center), Paragraph(hari_tanggal, style_normal)],
+            [Paragraph("Pukul", style_normal), Paragraph(":", style_center), Paragraph(pukul, style_normal)],
+            [Paragraph("Tempat", style_normal), Paragraph(":", style_center), Paragraph(tempat, style_normal)],
+            [Paragraph("Agenda", style_normal), Paragraph(":", style_center), Paragraph(f"Negosiasi {nama_pekerjaan}", style_normal)],
+            [Paragraph("Pimpinan Rapat", style_normal), Paragraph(":", style_center), Paragraph(pimpinan_rapat, style_normal)],
+            [Paragraph("Peserta Rapat", style_normal), Paragraph(":", style_center), Paragraph("Sesuai daftar hadir terlampir.", style_normal)],
+        ]
+        t_info = Table(info_data, colWidths=[120, 15, 385])
+        t_info.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP')]))
+        story.append(t_info)
+        story.append(Spacer(1, 10))
+
+        # Dasar Pelaksanaan
+        story.append(Paragraph("<b>Dasar Pelaksanaan</b>", style_normal))
+        for idx, d in enumerate(dasar_inputs, 1):
             if d.strip():
-                html_content += f"<li style='margin-bottom: 3px;'>{d}</li>"
-                
-        html_content += f"""
-            </ol>
+                story.append(Paragraph(f"{idx}. {d}", style_normal))
+        story.append(Spacer(1, 10))
 
-            <div class="bold" style="margin-top: 15px;">Jalannya Pembahasan</div>
-            <p style="margin-top: 5px; text-align: justify;">Negosiasi {nama_pekerjaan}.</p>
+        # Jalannya Pembahasan
+        story.append(Paragraph("<b>Jalannya Pembahasan</b>", style_normal))
+        story.append(Paragraph(f"Negosiasi {nama_pekerjaan}.", style_normal))
+        story.append(Spacer(1, 10))
 
-            <div class="bold" style="margin-top: 15px;">Hasil Pembahasan</div>
-            <ol style="margin-top: 5px; padding-left: 20px;">
-                <li style="margin-bottom: 5px; text-align: justify;">Telah diadakan negosiasi terhadap harga penawaran dengan {selected_vendor} terkait {nama_pekerjaan}.</li>
-                <li style="margin-bottom: 5px; text-align: justify;">Dari pembahasan tersebut butir 1 (satu) diatas, maka diperoleh hasil negosiasi sebagai berikut:
-                    <ul style="list-style-type: lower-alpha; margin-top: 5px;">
-                        <li style="margin-bottom: 4px;">Harga penawaran {selected_vendor} sebesar <b>{format_sebelum}</b> <b>{terbilang_sebelum}</b> belum termasuk PPN (rincian terlampir).</li>
-                        <li style="margin-bottom: 4px;">Harga setelah negosiasi sebesar <b>{format_sesudah}</b> <b>{terbilang_sesudah}</b> belum termasuk PPN dan harga tersebut {status_harga} (rincian terlampir).</li>
-                    </ul>
-                </li>
-                <li style="margin-bottom: 5px; text-align: justify;">Progres pekerjaan dilaporkan kepada tim IT Sub Regional Jawa.</li>
-                <li style="margin-bottom: 5px; text-align: justify;">Sambil menunggu proses purchase order (PO), diperintahkan kepada kontraktor agar segera melaksanakan pekerjaan tersebut.</li>
-            </ol>
+        # Hasil Pembahasan
+        story.append(Paragraph("<b>Hasil Pembahasan</b>", style_normal))
+        story.append(Paragraph(f"1. Telah diadakan negosiasi terhadap harga penawaran dengan {selected_vendor} terkait {nama_pekerjaan}.", style_normal))
+        story.append(Paragraph("2. Dari pembahasan tersebut butir 1 (satu) diatas, maka diperoleh hasil negosiasi sebagai berikut:", style_normal))
+        story.append(Paragraph(f"    a. Harga penawaran {selected_vendor} sebesar <b>{format_sebelum}</b> <b>{terbilang_sebelum}</b> belum termasuk PPN (rincian terlampir).", style_normal))
+        story.append(Paragraph(f"    b. Harga setelah negosiasi sebesar <b>{format_sesudah}</b> <b>{terbilang_sesudah}</b> belum termasuk PPN dan harga tersebut {status_harga} (rincian terlampir).", style_normal))
+        story.append(Paragraph("3. Progres pekerjaan dilaporkan kepada tim IT Sub Regional Jawa.", style_normal))
+        story.append(Paragraph("4. Sambil menunggu proses purchase order (PO), diperintahkan kepada kontraktor agar segera melaksanakan pekerjaan tersebut.", style_normal))
+        story.append(Spacer(1, 10))
 
-            <div class="bold" style="margin-top: 15px;">Penutup</div>
-            <p style="margin-top: 5px; text-align: justify;">Demikian Berita Acara Rapat ini dibuat agar dapat digunakan sebagaimana mestinya.</p>
+        # Penutup
+        story.append(Paragraph("<b>Penutup</b>", style_normal))
+        story.append(Paragraph("Demikian Berita Acara Rapat ini dibuat agar dapat digunakan sebagaimana mestinya.", style_normal))
+        story.append(Spacer(1, 15))
 
-            <div style="margin-top: 30px; float: right; width: 320px;">
-                Surabaya, ................................<br>
-                <b>PT. Pelindo (Persero) Sub Regional Jawa</b>
-            </div>
-            <div style="clear: both;"></div>
+        # Signatures
+        story.append(Paragraph("Surabaya, ................................", ParagraphStyle('RightDate', parent=style_normal, alignment=2)))
+        story.append(Paragraph("<b>PT. Pelindo (Persero) Sub Regional Jawa</b>", ParagraphStyle('RightDateBold', parent=style_bold, alignment=2)))
+        story.append(Spacer(1, 40))
 
-            <table class="sig-table">
-                <tr>
-                    <td>
-                        <div style="min-height: 70px;"></div>
-                        <b>{pelindo_lines[0].split('|')[0].strip() if pelindo_lines else 'Mulyo Wardoyo'}</b><br>
-                        {pelindo_lines[0].split('|')[1].strip() if pelindo_lines and '|' in pelindo_lines[0] else 'Manager TI Sub Regional Jawa'}
-                    </td>
-                    <td>
-                        <div style="min-height: 70px;"></div>
-                        <b>{vendor_lines[0].split('|')[0].strip() if vendor_lines else 'Perwakilan Vendor'}</b><br>
-                        {selected_vendor}
-                    </td>
-                </tr>
-        """
+        p_name_1 = pelindo_lines[0].split('|')[0].strip() if pelindo_lines else 'Mulyo Wardoyo'
+        p_title_1 = pelindo_lines[0].split('|')[1].strip() if pelindo_lines and '|' in pelindo_lines[0] else 'Manager TI Sub Regional Jawa'
+        v_name_1 = vendor_lines[0].split('|')[0].strip() if vendor_lines else 'Perwakilan Vendor'
+
+        sig_data = [
+            [Paragraph(f"<b>{p_name_1}</b><br/>{p_title_1}", style_normal), Paragraph(f"<b>{v_name_1}</b><br/>{selected_vendor}", style_normal)]
+        ]
         
         max_len = max(len(pelindo_lines), len(vendor_lines))
         for i in range(1, max_len):
-            p_name = pelindo_lines[i].split('|')[0].strip() if i < len(pelindo_lines) else ""
-            p_title = pelindo_lines[i].split('|')[1].strip() if i < len(pelindo_lines) and '|' in pelindo_lines[i] else ""
-            v_name = vendor_lines[i].split('|')[0].strip() if i < len(vendor_lines) else ""
-            v_title = vendor_lines[i].split('|')[1].strip() if i < len(vendor_lines) and '|' in vendor_lines[i] else ""
-            
-            html_content += f"""
-                <tr>
-                    <td><div style="min-height: 60px;"></div><b>{p_name}</b><br>{p_title}</td>
-                    <td><div style="min-height: 60px;"></div><b>{v_name}</b><br>{v_title}</td>
-                </tr>
-            """
+            p_n = pelindo_lines[i].split('|')[0].strip() if i < len(pelindo_lines) else ""
+            p_t = pelindo_lines[i].split('|')[1].strip() if i < len(pelindo_lines) and '|' in pelindo_lines[i] else ""
+            v_n = vendor_lines[i].split('|')[0].strip() if i < len(vendor_lines) else ""
+            v_t = vendor_lines[i].split('|')[1].strip() if i < len(vendor_lines) and '|' in vendor_lines[i] else ""
+            sig_data.append([Paragraph(f"<b>{p_n}</b><br/>{p_t}", style_normal), Paragraph(f"<b>{v_n}</b><br/>{v_t}", style_normal)])
 
-        html_content += f"""
-            </table>
+        t_sig = Table(sig_data, colWidths=[260, 260])
+        t_sig.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('BOTTOMPADDING', (0,0), (-1,-1), 30)]))
+        story.append(t_sig)
 
-            <div class="page-break"></div>
+        # Page Break for Attendance
+        story.append(PageBreak())
 
-            <div class="center bold" style="font-size: 12pt; margin-bottom: 15px;">DAFTAR HADIR</div>
-            <table class="info-table" style="margin-bottom: 15px;">
-                <tr><td class="label">Hari / Tanggal</td><td class="sep">:</td><td>{hari_tanggal}</td></tr>
-                <tr><td class="label">Pukul</td><td class="sep">:</td><td>{pukul}</td></tr>
-                <tr><td class="label">Tempat</td><td class="sep">:</td><td>{tempat}</td></tr>
-                <tr><td class="label">Agenda</td><td class="sep">:</td><td>Negosiasi {nama_pekerjaan}</td></tr>
-            </table>
+        # Daftar Hadir
+        story.append(Paragraph("<b>DAFTAR HADIR</b>", style_title))
+        story.append(Spacer(1, 10))
+        story.append(t_info)
+        story.append(Spacer(1, 15))
 
-            <table class="attendance">
-                <thead>
-                    <tr><th style="width: 40px;">NO.</th><th>N A M A</th><th>JABATAN / INSTANSI</th><th style="width: 100px;">TANDA TANGAN</th></tr>
-                </thead>
-                <tbody>
-        """
-        
+        # Attendance Table
+        att_table_data = [["NO.", "N A M A", "JABATAN / INSTANSI", "TANDA TANGAN"]]
         all_attendees = []
         for line in pelindo_lines:
             parts = line.split('|')
@@ -289,22 +273,27 @@ else:
             all_attendees.append((parts[0].strip(), parts[1].strip() if len(parts) > 1 else selected_vendor))
             
         for idx, (att_name, att_title) in enumerate(all_attendees, 1):
-            html_content += f"<tr><td class='center'>{idx}.</td><td>{att_name}</td><td>{att_title}</td><td class='center'>{idx}. ........</td></tr>"
+            att_table_data.append([str(idx), att_name, att_title, f"{idx}. ........"])
             
         for idx in range(len(all_attendees) + 1, 6):
-            html_content += f"<tr><td class='center'>{idx}.</td><td></td><td></td><td class='center'>{idx}. ........</td></tr>"
+            att_table_data.append([str(idx), "", "", f"{idx}. ........"])
 
-        html_content += "</tbody></table></body></html>"
+        t_att = Table(att_table_data, colWidths=[35, 170, 225, 90])
+        t_att.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('GRID', (0,0), (-1,-1), 0.5, colors.black),
+            ('FONTNAME', (0,0), (-1,0), 'Times-Bold'),
+            ('FONTSIZE', (0,0), (-1,-1), 10),
+            ('BOTTOMPADDING', (0,0), (-1,-1), 6),
+            ('TOPPADDING', (0,0), (-1,-1), 6),
+        ]))
+        story.append(t_att)
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
-            output_pdf_path = tmp_pdf.name
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".html", mode="w", encoding="utf-8") as tmp_html:
-            tmp_html.write(html_content)
-            input_html_path = tmp_html.name
+        doc.build(story)
 
-        HTML(filename=input_html_path).write_pdf(output_pdf_path)
-
-        st.success("✅ Dokumen PDF Berita Acara berhasil dibuat!")
+        st.success("✅ Dokumen PDF Berita Acara berhasil dibuat dengan ReportLab!")
 
         with open(output_pdf_path, "rb") as pdf_file:
             pdf_bytes = pdf_file.read()
